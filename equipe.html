@@ -49,7 +49,7 @@
         #referralCode:hover, #referralLink:hover {
             text-decoration: underline;
         }
-        #copyMessage, #copyLinkMessage {
+        #copyMessage {
             font-size: 14px;
             color: green;
             display: none;
@@ -74,13 +74,13 @@
     <div class="section" id="referralSection">
         <p>Votre Code de Parrainage :</p>
         <p id="referralCode">Chargement...</p>
-        <p id="copyMessage">Code copié !</p>
+        <p id="copyMessage">Code copié !</p>
     </div>
     
     <div class="section" id="linkSection">
         <p>Votre Lien de Parrainage :</p>
         <p id="referralLink">Chargement...</p>
-        <p id="copyLinkMessage">Lien copié !</p>
+        <p id="copyLinkMessage">Lien copié !</p>
     </div>
 </div>
 
@@ -112,10 +112,10 @@
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
                     const referralCode = userData.userReferralCode;
-                    const commissionBalance = userData.commissionBalance || 0;
+                    let commissionBalance = userData.commissionBalance || 0;
 
                     document.getElementById("referralCode").innerText = referralCode;
-                    document.getElementById("commissionBalance").innerText = `${commissionBalance} FCFA`;
+                    document.getElementById("commissionBalance").innerText = `${commissionBalance.toFixed(2)} FCFA`;
 
                     const referralLink = `${window.location.origin}/signup.html?referral=${referralCode}`;
                     document.getElementById("referralLink").innerText = referralLink;
@@ -129,25 +129,31 @@
                         for (const uid in users) {
                             if (users[uid].referralCodeUsed === referralCode) {
                                 count++;
-
                                 if (!users[uid].commissionCredited) {
                                     const rechargeAmount = users[uid].balance || 0;
                                     const commission = rechargeAmount * 0.05;
                                     
-                                    await update(userRef, {
-                                        commissionBalance: commissionBalance + commission
-                                    });
+                                    console.log("Montant de recharge:", rechargeAmount);
+                                    console.log("Commission calculée:", commission);
+                                    console.log("Balance de commission actuelle avant mise à jour:", commissionBalance);
 
-                                    const referredUserRef = ref(database, 'users/' + uid);
-                                    await update(referredUserRef, {
+                                    commissionBalance += commission;
+
+                                    await update(userRef, {
+                                        commissionBalance: commissionBalance,
+                                    });
+                                    await update(ref(database, 'users/' + uid), {
                                         commissionCredited: true
                                     });
+
+                                    console.log("Balance de commission après mise à jour:", commissionBalance);
                                 }
                             }
                         }
                     }
 
                     document.getElementById("referralCount").innerText = count;
+                    document.getElementById("commissionBalance").innerText = `${commissionBalance.toFixed(2)} FCFA`;
                 } else {
                     document.getElementById("referralCode").innerText = "Code non disponible.";
                 }
