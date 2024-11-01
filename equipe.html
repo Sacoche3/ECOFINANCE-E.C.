@@ -44,22 +44,22 @@
             font-weight: bold;
             color: #007bff;
             cursor: pointer;
-            user-select: none; /* Disable text selection */
+            user-select: none;
         }
         #referralCode:hover, #referralLink:hover {
-            text-decoration: underline; /* Underline on hover */
+            text-decoration: underline;
         }
-        #copyMessage {
+        #copyMessage, #copyLinkMessage {
             font-size: 14px;
             color: green;
-            display: none; /* Hidden by default */
+            display: none;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Gagner 5 % sur le rechargement de votre filleul </h2>
+    <h2>Gagner 5 % sur le rechargement de votre filleul</h2>
 
     <div class="section" id="teamTotal">
         <p>Total d'Équipe :</p>
@@ -74,13 +74,13 @@
     <div class="section" id="referralSection">
         <p>Votre Code de Parrainage :</p>
         <p id="referralCode">Chargement...</p>
-        <p id="copyMessage">Code copié !</p>
+        <p id="copyMessage">Code copié !</p>
     </div>
     
     <div class="section" id="linkSection">
         <p>Votre Lien de Parrainage :</p>
         <p id="referralLink">Chargement...</p>
-        <p id="copyLinkMessage">Lien copié !</p>
+        <p id="copyLinkMessage">Lien copié !</p>
     </div>
 </div>
 
@@ -117,11 +117,9 @@
                     document.getElementById("referralCode").innerText = referralCode;
                     document.getElementById("commissionBalance").innerText = `${commissionBalance} FCFA`;
 
-                    // Générer le lien de parrainage
                     const referralLink = `${window.location.origin}/signup.html?referral=${referralCode}`;
                     document.getElementById("referralLink").innerText = referralLink;
 
-                    // Compter les utilisateurs inscrits avec ce code
                     const allUsersRef = ref(database, 'users/');
                     const allUsersSnapshot = await get(allUsersRef);
                     let count = 0;
@@ -131,13 +129,17 @@
                         for (const uid in users) {
                             if (users[uid].referralCodeUsed === referralCode) {
                                 count++;
-                                // Créditer 5 % à la première recharge de l'utilisateur
+
                                 if (!users[uid].commissionCredited) {
-                                    const rechargeAmount = users[uid].balance || 0; // Remplacer par la méthode de recharge
+                                    const rechargeAmount = users[uid].balance || 0;
                                     const commission = rechargeAmount * 0.05;
-                                    // Mise à jour du solde de commission
+                                    
                                     await update(userRef, {
-                                        commissionBalance: commissionBalance + commission,
+                                        commissionBalance: commissionBalance + commission
+                                    });
+
+                                    const referredUserRef = ref(database, 'users/' + uid);
+                                    await update(referredUserRef, {
                                         commissionCredited: true
                                     });
                                 }
@@ -160,25 +162,23 @@
         }
     });
 
-    // Fonction pour copier le code de parrainage
     document.getElementById("referralCode").onclick = function() {
         const code = this.innerText;
         navigator.clipboard.writeText(code).then(() => {
             document.getElementById("copyMessage").style.display = "block";
             setTimeout(() => {
                 document.getElementById("copyMessage").style.display = "none";
-            }, 2000); // Message disparaît après 2 secondes
+            }, 2000);
         });
     };
 
-    // Fonction pour copier le lien de parrainage
     document.getElementById("referralLink").onclick = function() {
         const link = this.innerText;
         navigator.clipboard.writeText(link).then(() => {
             document.getElementById("copyLinkMessage").style.display = "block";
             setTimeout(() => {
                 document.getElementById("copyLinkMessage").style.display = "none";
-            }, 2000); // Message disparaît après 2 secondes
+            }, 2000);
         });
     };
 </script>
