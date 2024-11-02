@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="fr">
+<!-- Head et styles restent les mêmes -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tableau de Bord de Parrainage</title>
     <style>
-        /* Styles restent les mêmes */
+        /* Styles identiques... */
         body {
             font-family: Arial, sans-serif;
             display: flex;
@@ -30,12 +31,6 @@
             border: 1px solid #007bff;
             border-radius: 5px;
             background-color: #e9f7ff;
-        }
-        #referralCode, #referralLink {
-            font-size: 24px;
-            font-weight: bold;
-            color: #007bff;
-            cursor: pointer;
         }
     </style>
 </head>
@@ -63,7 +58,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+    import { getDatabase, ref, get, set, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCPQvlxIjvJPkMZQ4qElkHla_xQ5QiZfFs",
@@ -79,6 +74,46 @@
     const auth = getAuth(app);
     const database = getDatabase(app);
 
+    // Fonction pour vérifier et créditer la commission une seule fois
+    async function checkAndCreditCommission(parrainUid, filleulUid, filleulData) {
+        // Vérifie si la commission a déjà été créditée
+        const commissionRef = ref(database, `commissions/${parrainUid}/${filleulUid}`);
+        const commissionSnapshot = await get(commissionRef);
+        
+        if (!commissionSnapshot.exists() && filleulData.balance > 0) {
+            try {
+                // Récupère le solde actuel du parrain
+                const parrainRef = ref(database, `users/${parrainUid}`);
+                const parrainSnapshot = await get(parrainRef);
+                const parrainData = parrainSnapshot.val();
+                
+                // Calcule la commission
+                const commission = filleulData.balance * 0.05;
+                
+                // Met à jour le solde du parrain
+                const newBalance = (parrainData.commissionBalance || 0) + commission;
+                
+                // Crée un enregistrement de la commission
+                await set(commissionRef, {
+                    amount: commission,
+                    date: new Date().toISOString(),
+                    filleulBalance: filleulData.balance
+                });
+                
+                // Met à jour le solde de commission du parrain
+                await update(parrainRef, {
+                    commissionBalance: newBalance
+                });
+                
+                return newBalance;
+            } catch (error) {
+                console.error("Erreur lors du crédit de la commission:", error);
+                return null;
+            }
+        }
+        return null;
+    }
+
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             try {
@@ -88,12 +123,12 @@
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
                     const referralCode = userData.userReferralCode;
-                    const commissionBalance = userData.commissionBalance || 0;
+                    let commissionBalance = userData.commissionBalance || 0;
 
                     document.getElementById("referralCode").innerText = referralCode;
                     document.getElementById("commissionBalance").innerText = `${commissionBalance} FCFA`;
 
-                    // Compter les filleuls et vérifier les commissions
+                    // Compte les filleuls et vérifie les commissions
                     const allUsersRef = ref(database, 'users/');
                     const allUsersSnapshot = await get(allUsersRef);
                     let count = 0;
@@ -101,45 +136,25 @@
                     if (allUsersSnapshot.exists()) {
                         const users = allUsersSnapshot.val();
                         for (const uid in users) {
-                            const filleul = users[uid];
-                            
-                            // Vérifie si c'est un filleul de l'utilisateur actuel
-                            if (filleul.referralCodeUsed === referralCode) {
+                            if (users[uid].referralCodeUsed === referralCode) {
                                 count++;
                                 
-                                // Vérifie si la commission n'a pas déjà été créditée
-                                if (filleul.balance > 0 && !filleul.commissionPaid) {
-                                    // Calcule et crédite la commission une seule fois
-                                    const commission = filleul.balance * 0.05;
-                                    
-                                    // Met à jour le solde du parrain
-                                    const newCommissionBalance = commissionBalance + commission;
-                                    
-                                    // Met à jour la base de données
-                                    await update(userRef, {
-                                        commissionBalance: newCommissionBalance
-                                    });
-                                    
-                                    // Marque la commission comme payée pour ce filleul
-                                    await update(ref(database, 'users/' + uid), {
-                                        commissionPaid: true
-                                    });
-                                    
-                                    // Met à jour l'affichage
-                                    document.getElementById("commissionBalance").innerText = `${newCommissionBalance} FCFA`;
+                                // Vérifie et crédite la commission si nécessaire
+                                const newBalance = await checkAndCreditCommission(user.uid, uid, users[uid]);
+                                if (newBalance !== null) {
+                                    commissionBalance = newBalance;
+                                    document.getElementById("commissionBalance").innerText = `${commissionBalance} FCFA`;
                                 }
                             }
                         }
+                        document.getElementById("referralCount").innerText = count;
                     }
-
-                    document.getElementById("referralCount").innerText = count;
-
                 } else {
-                    document.getElementById("referralCode").innerText = "Code non disponible.";
+                    document.getElementById("referralCode").innerText = "Code non disponible";
                 }
             } catch (error) {
                 console.error("Erreur:", error);
-                document.getElementById("referralCode").innerText = "Erreur de chargement.";
+                document.getElementById("referralCode").innerText = "Erreur de chargement";
             }
         } else {
             window.location.href = "login.html";
