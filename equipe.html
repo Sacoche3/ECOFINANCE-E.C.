@@ -59,7 +59,7 @@
 <body>
 
 <div class="container">
-    <h2>Gagner 5 % sur le rechargement de votre filleul</h2>
+    <h2>Gagner 5 % sur le rechargement de votre filleul </h2>
 
     <div class="section" id="teamTotal">
         <p>Total d'Équipe :</p>
@@ -112,14 +112,16 @@
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
                     const referralCode = userData.userReferralCode;
-                    let commissionBalance = userData.commissionBalance || 0;
+                    const commissionBalance = userData.commissionBalance || 0;
 
                     document.getElementById("referralCode").innerText = referralCode;
-                    document.getElementById("commissionBalance").innerText = `${commissionBalance.toFixed(2)} FCFA`;
+                    document.getElementById("commissionBalance").innerText = `${commissionBalance} FCFA`;
 
-                    const referralLink = `${window.location.origin}/index.html?referral=${referralCode}`;
+                    // Générer le lien de parrainage
+                    const referralLink = `${window.location.origin}/signup.html?referral=${referralCode}`;
                     document.getElementById("referralLink").innerText = referralLink;
 
+                    // Compter les utilisateurs inscrits avec ce code
                     const allUsersRef = ref(database, 'users/');
                     const allUsersSnapshot = await get(allUsersRef);
                     let count = 0;
@@ -129,31 +131,25 @@
                         for (const uid in users) {
                             if (users[uid].referralCodeUsed === referralCode) {
                                 count++;
+                                // Créditer 5 % à la première recharge de l'utilisateur
                                 if (!users[uid].commissionCredited) {
-                                    const rechargeAmount = users[uid].balance || 0;
+                                    const rechargeAmount = users[uid].balance || 0; // Remplacer par la méthode de recharge
                                     const commission = rechargeAmount * 0.05;
-                                    
-                                    console.log("Montant de recharge:", rechargeAmount);
-                                    console.log("Commission calculée:", commission);
-                                    console.log("Balance de commission actuelle avant mise à jour:", commissionBalance);
-
-                                    commissionBalance += commission;
-
+                                    // Mise à jour du solde de commission de l'utilisateur parrain
                                     await update(userRef, {
-                                        commissionBalance: commissionBalance,
+                                        commissionBalance: commissionBalance + commission,
+                                        commissionCredited: true // Marquer la commission comme créditée
                                     });
+                                    // Mise à jour du solde de commission de l'utilisateur parrainé
                                     await update(ref(database, 'users/' + uid), {
-                                        commissionCredited: true
+                                        commissionCredited: true // Marquer la commission comme créditée
                                     });
-
-                                    console.log("Balance de commission après mise à jour:", commissionBalance);
                                 }
                             }
                         }
                     }
 
                     document.getElementById("referralCount").innerText = count;
-                    document.getElementById("commissionBalance").innerText = `${commissionBalance.toFixed(2)} FCFA`;
                 } else {
                     document.getElementById("referralCode").innerText = "Code non disponible.";
                 }
@@ -168,23 +164,25 @@
         }
     });
 
+    // Fonction pour copier le code de parrainage
     document.getElementById("referralCode").onclick = function() {
         const code = this.innerText;
         navigator.clipboard.writeText(code).then(() => {
             document.getElementById("copyMessage").style.display = "block";
             setTimeout(() => {
                 document.getElementById("copyMessage").style.display = "none";
-            }, 2000);
+            }, 2000); // Message disparaît après 2 secondes
         });
     };
 
+    // Fonction pour copier le lien de parrainage
     document.getElementById("referralLink").onclick = function() {
         const link = this.innerText;
         navigator.clipboard.writeText(link).then(() => {
             document.getElementById("copyLinkMessage").style.display = "block";
             setTimeout(() => {
                 document.getElementById("copyLinkMessage").style.display = "none";
-            }, 2000);
+            }, 2000); // Message disparaît après 2 secondes
         });
     };
 </script>
