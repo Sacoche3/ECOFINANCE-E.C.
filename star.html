@@ -116,6 +116,10 @@
         <div class="bg-white rounded-lg p-8 max-w-md mx-auto shadow-xl text-center">
             <h2 class="text-2xl font-bold mb-4 text-gray-800">Confirmation de Réclamation</h2>
             <p class="text-gray-600 mb-6">Êtes-vous sûr de vouloir faire une réclamation ?</p>
+            
+            <!-- Nouvel élément ajouté ici -->
+            <p id="lastClaim" class="text-sm text-gray-500 mb-4"></p>
+            
             <div class="flex justify-center space-x-4">
                 <button 
                     onclick="reclamer()" 
@@ -186,26 +190,9 @@
             }
         });
 
-        function miser() {
-            const betAmount = parseFloat(document.getElementById('betAmount').value);
-            if (isNaN(betAmount) || betAmount <= 0) {
-                alert("Veuillez entrer un montant valide pour la mise.");
-                return;
-            }
-
-            // Effacer le champ de saisie après mise
-            document.getElementById('betAmount').value = '';
-        }
-
-        function reclamer() {
-            lastClaim = new Date().toLocaleString();
-            document.getElementById('lastClaim').innerText = lastClaim;
-            togglePopup();
-        }
-
-        function togglePopup() {
-            const popupSection = document.getElementById("popup-section");
-            popupSection.style.display = (popupSection.style.display === "flex") ? "none" : "flex";
+        function updateChart() {
+            weeklyChart.data.datasets[0].data = weeklyData;
+            weeklyChart.update();
         }
 
         // Mettre à jour le graphique automatiquement toutes les 1 seconde avec des mises aléatoires
@@ -216,13 +203,7 @@
 
             updateChart();
         }, 1000); // Mise à jour toutes les 1 seconde
-
-        function updateChart() {
-            weeklyChart.data.datasets[0].data = weeklyData;
-            weeklyChart.update();
-        }
     </script>
-    </body>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -265,6 +246,12 @@
 
                     totalBets = userData.totalBets || 0;
                     document.getElementById("totalBets").innerText = totalBets.toFixed(2) + " FCFA";
+
+                    // Afficher la dernière réclamation si elle existe
+                    if (userData.lastClaim) {
+                        const lastClaimDate = new Date(userData.lastClaim);
+                        document.getElementById("lastClaim").innerText = "Dernière réclamation : " + lastClaimDate.toLocaleDateString();
+                    }
                 }
             }
         });
@@ -341,7 +328,7 @@
             }
         };
 
-        // Fonction de réclamation (reste inchangée)
+        // Fonction de réclamation 
         window.reclamer = async function() {
             const user = auth.currentUser;
             if (user) {
@@ -373,7 +360,9 @@
 
                     // Afficher le nouveau solde sur la page, arrondi à deux décimales
                     document.getElementById("balance").innerText = newBalance.toFixed(2) + " FCFA";
-                    document.getElementById("lastClaim").innerText = today.toLocaleDateString();
+                    
+                    // Correction : Mettre à jour l'élément lastClaim
+                    document.getElementById("lastClaim").innerText = "Dernière réclamation : " + today.toLocaleDateString();
 
                     // Masquer le popup après la réclamation
                     togglePopup();
@@ -384,7 +373,17 @@
             }
         };
 
-        // Autres fonctions utilitaires (togglePopup, etc.) restent inchangées
+        // Fonction de déconnexion
+        window.deconnexion = function() {
+            auth.signOut().then(() => {
+                // Redirection vers la page de connexion
+                window.location.href = 'connexion.html';
+            }).catch((error) => {
+                console.error('Erreur de déconnexion :', error);
+            });
+        };
+
+        // Autres fonctions utilitaires
         window.togglePopup = function() {
             const popupSection = document.getElementById("popup-section");
             popupSection.style.display = (popupSection.style.display === "flex") ? "none" : "flex";
