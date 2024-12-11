@@ -62,8 +62,8 @@
                         <p id="totalBets" class="text-2xl font-bold text-green-600">0.00 FCFA</p>
                     </div>
                     <div class="bg-purple-50 p-3 rounded-lg">
-                        <p class="text-sm text-gray-600">Dernière Réclamation</p>
-                        <p id="lastClaim" class="text-xl font-semibold text-purple-600">Jamais</p>
+                        <p class="text-sm text-gray-600">Fin de Cycle</p>
+                        <p id="cycleEnd" class="text-xl font-semibold text-purple-600">Non défini</p>
                     </div>
                 </div>
             </div>
@@ -79,10 +79,14 @@
             <div class="bg-white rounded-lg p-6 shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-800">Faire une Mise</h2>
                 <div class="space-y-4">
+                    <div class="text-center text-sm text-gray-600 mb-2">
+                        Mise minimale : 2000 FCFA
+                    </div>
                     <input 
                         type="number" 
                         id="betAmount" 
                         placeholder="Montant à miser (FCFA)" 
+                        min="2000"
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                     <button 
@@ -218,9 +222,8 @@
             weeklyChart.update();
         }
     </script>
-</body>
-
-<script type="module">
+    </body>
+    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
         import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
@@ -239,7 +242,12 @@
         const auth = getAuth(app);
         const database = getDatabase(app);
 
-        let totalBets = 0; // Variable pour suivre le total des mises
+        const MINIMUM_BET = 2000; // Montant minimum de mise
+        let totalBets = 0;
+        let cycleEndDate = null;
+
+        // Ajouter un attribut min à l'input pour la validation côté navigateur
+        document.getElementById('betAmount').setAttribute('min', MINIMUM_BET);
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
@@ -248,52 +256,32 @@
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
                     document.getElementById("balance").innerText = userData.balance.toFixed(2) + " FCFA";
-                    document.getElementById("lastClaim").innerText = userData.lastClaim || "Jamais";
-                    totalBets = userData.totalBets || 0; // Récupérer le total des mises de la base de données
-                    document.getElementById("totalBets").innerText = totalBets.toFixed(2) + " FCFA"; // Afficher le total des mises
+                    
+                    // Gestion du cycle
+                    if (userData.cycleEndDate) {
+                        cycleEndDate = new Date(userData.cycleEndDate);
+                        document.getElementById("cycleEnd").innerText = cycleEndDate.toLocaleDateString();
+                    }
 
-                    // Mettre à jour le graphique
-                    updateChart(userData.weeklyBets || []);
-                } else {
-                    document.getElementById("balance").innerText = "Aucun solde trouvé.";
+                    totalBets = userData.totalBets || 0;
+                    document.getElementById("totalBets").innerText = totalBets.toFixed(2) + " FCFA";
                 }
-            } else {
-                document.getElementById("balance").innerText = "Veuillez vous connecter.";
             }
         });
 
-        const ctx = document.getElementById('weeklyChart').getContext('2d');
-        let weeklyChart;
+        // Fonction pour vérifier si le cycle est terminé
+        function isCycleExpired() {
+            if (!cycleEndDate) return true;
+            return new Date() > cycleEndDate;
+        }
 
-        function updateChart(data) {
-            const labels = data.map(item => item.day); // Supposons que chaque élément ait un jour
-            const values = data.map(item => item.amount); // Supposons que chaque élément ait un montant
-
-            if (weeklyChart) {
-                weeklyChart.destroy(); // Détruire l'ancien graphique
-            }
-
-            weeklyChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Mises Hebdomadaires',
-                        data: values,
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
+        // Fonction pour réinitialiser le cycle
+        function resetCycle() {
+            const newCycleEndDate = new Date();
+            newCycleEndDate.setFullYear(newCycleEndDate.getFullYear() + 1);
+            cycleEndDate = newCycleEndDate;
+            totalBets = 0; // Réinitialiser le total des mises
+            return newCycleEndDate;
         }
 
         // Fonction pour miser de l'argent
@@ -301,7 +289,18 @@
             const betAmount = parseFloat(document.getElementById("betAmount").value);
             const user = auth.currentUser;
 
-            if (user && !isNaN(betAmount) && betAmount > 0) {
+            // Validation du montant de mise
+            if (!betAmount || isNaN(betAmount)) {
+                alert("Veuillez entrer un montant valide.");
+                return;
+            }
+
+            if (betAmount < MINIMUM_BET) {
+                alert(`Le montant minimum de mise est de ${MINIMUM_BET} FCFA.`);
+                return;
+            }
+
+            if (user) {
                 const userRef = ref(database, 'users/' + user.uid);
                 const snapshot = await get(userRef);
 
@@ -309,29 +308,40 @@
                     const userData = snapshot.val();
                     const currentBalance = userData.balance;
 
+                    // Vérifier et potentiellement réinitialiser le cycle
+                    if (isCycleExpired()) {
+                        const newCycleEnd = resetCycle();
+                        document.getElementById("cycleEnd").innerText = newCycleEnd.toLocaleDateString();
+                    }
+
                     if (currentBalance >= betAmount) {
-                        totalBets += betAmount; // Ajouter la mise au total
-                        const newBalance = currentBalance - betAmount; // Déduire la mise du solde
+                        const newTotalBets = totalBets + betAmount;
+                        const newBalance = currentBalance - betAmount;
 
-                        // Mettre à jour la base de données
-                        await update(userRef, { balance: newBalance, totalBets: totalBets });
+                        // Mettre à jour la base de données avec le nouveau cycle
+                        await update(userRef, { 
+                            balance: newBalance, 
+                            totalBets: newTotalBets,
+                            cycleEndDate: cycleEndDate.toISOString(),
+                            lastBetDate: new Date().toISOString()
+                        });
 
-                        // Afficher les nouvelles valeurs
+                        // Mise à jour des affichages
                         document.getElementById("balance").innerText = newBalance.toFixed(2) + " FCFA";
-                        document.getElementById("totalBets").innerText = totalBets.toFixed(2) + " FCFA";
-                        document.getElementById("betAmount").value = ""; // Réinitialiser le champ de mise
+                        document.getElementById("totalBets").innerText = newTotalBets.toFixed(2) + " FCFA";
+                        document.getElementById("betAmount").value = "";
 
-                        alert("Mise réussie de " + betAmount.toFixed(2) + " FCFA. Total des mises : " + totalBets.toFixed(2) + " FCFA.");
+                        alert(`Mise réussie de ${betAmount.toFixed(2)} FCFA. Montant minimum respecté. Cycle se termine le ${cycleEndDate.toLocaleDateString()}`);
                     } else {
                         alert("Solde insuffisant pour cette mise.");
                     }
                 }
             } else {
-                alert("Veuillez entrer un montant valide pour miser.");
+                alert("Veuillez vous connecter pour effectuer une mise.");
             }
         };
 
-        // Fonction de réclamation
+        // Fonction de réclamation (reste inchangée)
         window.reclamer = async function() {
             const user = auth.currentUser;
             if (user) {
@@ -347,7 +357,7 @@
                     // Vérifie si une réclamation a été faite aujourd'hui
                     if (lastClaimDate && lastClaimDate.toDateString() === today.toDateString()) {
                         alert("Vous avez déjà réclamé aujourd'hui. Veuillez réessayer demain.");
-                        return; // Empêche la réclamation si déjà faite aujourd'hui
+                        return;
                     }
 
                     // Calculer le montant à réclamer (5 % du total des mises)
@@ -355,11 +365,15 @@
                     const newBalance = currentBalance + claimAmount;
 
                     // Mettre à jour le solde et la date de réclamation dans la base de données
-                    await update(userRef, { balance: newBalance, lastClaim: today.toISOString(), totalBets: totalBets });
+                    await update(userRef, { 
+                        balance: newBalance, 
+                        lastClaim: today.toISOString(), 
+                        totalBets: totalBets 
+                    });
 
                     // Afficher le nouveau solde sur la page, arrondi à deux décimales
                     document.getElementById("balance").innerText = newBalance.toFixed(2) + " FCFA";
-                    document.getElementById("lastClaim").innerText = today.toLocaleDateString(); // Met à jour la date de la dernière réclamation
+                    document.getElementById("lastClaim").innerText = today.toLocaleDateString();
 
                     // Masquer le popup après la réclamation
                     togglePopup();
@@ -369,7 +383,12 @@
                 alert("Veuillez vous connecter pour faire une réclamation.");
             }
         };
+
+        // Autres fonctions utilitaires (togglePopup, etc.) restent inchangées
+        window.togglePopup = function() {
+            const popupSection = document.getElementById("popup-section");
+            popupSection.style.display = (popupSection.style.display === "flex") ? "none" : "flex";
+        };
     </script>
-</html>
 </body>
 </html>
